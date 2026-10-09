@@ -1,0 +1,13 @@
+# Ignore backend and raw data from Vercel deployment so it deploys purely as static index.html
+app.py
+data_processor.py
+build_standalone.py
+export_docx.py
+export_pdf.py
+requirements.txt
+run_app.bat
+*.xlsx
+*.docx
+*.ipynb
+__pycache__/
+.cache/
