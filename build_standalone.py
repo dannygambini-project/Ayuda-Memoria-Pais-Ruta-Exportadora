@@ -1,11 +1,32 @@
+import base64
+import io
 import json
 import os
 import sys
+import zipfile
 from datetime import datetime
 from data_processor import DataStore
+from export_docx import generate_docx
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 OUTPUT_FILE = os.path.join(BASE_DIR, "Ayuda_Memoria_País_PROMPERU_2026.html")
+
+def get_docx_template_b64():
+    """Genera la plantilla base ZIP para documentos DOCX sin document.xml"""
+    rep_dummy = {
+        'country': 'Pais',
+        'title': 'Ayuda memoria',
+        'subtitle': 'Empresas exportadoras',
+        'paragraphs': {'p1': '', 'p2': '', 'events_heading': '', 'events_bullets': []}
+    }
+    buf = generate_docx(rep_dummy)
+    t_buf = io.BytesIO()
+    with zipfile.ZipFile(buf, 'r') as z_in:
+        with zipfile.ZipFile(t_buf, 'w', compression=zipfile.ZIP_DEFLATED) as z_out:
+            for item in z_in.infolist():
+                if item.filename != 'word/document.xml':
+                    z_out.writestr(item.filename, z_in.read(item.filename))
+    return base64.b64encode(t_buf.getvalue()).decode('ascii')
 
 def build_standalone():
     print("Iniciando compilación de versión HTML autónoma y portable...")
@@ -33,6 +54,14 @@ def build_standalone():
         with open(css_path, "r", encoding="utf-8") as f:
             css_content = f.read()
 
+    # 2.5 Cargar JSZip y generar plantilla DOCX en Base64 para exportación .docx nativa
+    jszip_path = os.path.join(BASE_DIR, "static", "js", "jszip.min.js")
+    jszip_content = ""
+    if os.path.exists(jszip_path):
+        with open(jszip_path, "r", encoding="utf-8") as f:
+            jszip_content = f.read()
+    docx_template_b64 = get_docx_template_b64()
+
     # 3. Construir el HTML completo
     html_content = f"""<!DOCTYPE html>
 <html lang="es">
@@ -52,6 +81,12 @@ def build_standalone():
   
   <!-- Chart.js para visualización -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- JSZip para generación de documentos Word (.docx) nativos -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+  <script>
+{jszip_content}
+  </script>
 
   <style>
 {css_content}
@@ -125,9 +160,9 @@ def build_standalone():
 
         <!-- Botones de Descarga y Exportación -->
         <div class="action-buttons-group">
-          <button id="downloadDocxBtn" class="btn btn-word" title="Descargar documento editable oficial en Word">
+          <button id="downloadDocxBtn" class="btn btn-word" title="Descargar documento editable oficial en Word (.docx)">
             <i class="fa-solid fa-file-word"></i>
-            <span>Descargar en Word (.doc/.docx)</span>
+            <span>Descargar en Word (.docx)</span>
           </button>
           
           <button id="downloadPdfBtn" class="btn btn-pdf" title="Guardar o imprimir reporte en PDF">
@@ -768,99 +803,99 @@ def build_standalone():
       }}
     }}
 
-    // EXPORTACIÓN WORD CLIENT-SIDE TOTALMENTE AUTÓNOMA
-    function downloadWordOfficial() {{
-      if (!AppState.currentReport) return;
-      const r = AppState.currentReport;
-      const p = r.paragraphs;
+    // PLANTILLA BASE OPENXML DOCX Y GENERADOR NATIVO .DOCX
+    const DOCX_TEMPLATE_B64 = "{docx_template_b64}";
 
-      let bulletsHtml = '';
+    function escapeXml(str) {{
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&apos;');
+    }}
+
+    function buildDocumentXml(r) {{
+      const p = r.paragraphs || {{}};
+      let bulletsXml = '';
       if (p.events_bullets && p.events_bullets.length > 0) {{
         p.events_bullets.forEach(b => {{
-          bulletsHtml += `<li style="font-family: Calibri, sans-serif; font-size: 11pt; margin-bottom: 3pt; line-height: 1.15;">${{b}}</li>`;
+          bulletsXml += `<w:p><w:pPr><w:pStyle w:val="ListBullet"/><w:spacing w:before="0" w:after="60" w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr><w:t>${{escapeXml(b)}}</w:t></w:r></w:p>`;
         }});
       }} else {{
-        bulletsHtml = '<li style="font-family: Calibri, sans-serif; font-size: 11pt;">No se registraron eventos o programas para las empresas exportadoras a este destino.</li>';
+        bulletsXml = `<w:p><w:pPr><w:pStyle w:val="ListBullet"/><w:spacing w:before="0" w:after="60" w:line="276" w:lineRule="auto"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr><w:t>No se registraron eventos o programas para las empresas exportadoras a este destino.</w:t></w:r></w:p>`;
       }}
 
-      const wordDocContent = `
-        <html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
-        <head>
-          <meta charset='utf-8'>
-          <title>${{r.title}}</title>
-          <style>
-            @page {{
-              size: 8.5in 11.0in;
-              margin: 1.0in;
-            }}
-            body {{
-              font-family: 'Calibri', sans-serif;
-              font-size: 11pt;
-              line-height: 1.15;
-              color: #000000;
-            }}
-            h1.title {{
-              font-family: 'Calibri', sans-serif;
-              font-size: 20pt;
-              font-weight: bold;
-              color: #003366;
-              margin-top: 0;
-              margin-bottom: 4pt;
-            }}
-            h2.subtitle {{
-              font-family: 'Calibri', sans-serif;
-              font-size: 14pt;
-              font-weight: bold;
-              color: #505050;
-              margin-top: 0;
-              margin-bottom: 14pt;
-            }}
-            p.body-p {{
-              font-family: 'Calibri', sans-serif;
-              font-size: 11pt;
-              line-height: 1.15;
-              margin-bottom: 8pt;
-              text-align: justify;
-            }}
-            p.events-h {{
-              font-family: 'Calibri', sans-serif;
-              font-size: 11pt;
-              font-weight: bold;
-              margin-top: 10pt;
-              margin-bottom: 6pt;
-            }}
-            ul.events-l {{
-              margin-top: 0;
-              margin-bottom: 12pt;
-              padding-left: 20pt;
-            }}
-          </style>
-        </head>
-        <body>
-          <h1 class="title">${{r.title}}</h1>
-          <h2 class="subtitle">${{r.subtitle}}</h2>
-          <p class="body-p">${{p.p1}}</p>
-          <p class="body-p">${{p.p2}}</p>
-          <p class="events-h">${{p.events_heading}}</p>
-          <ul class="events-l">
-            ${{bulletsHtml}}
-          </ul>
-        </body>
-        </html>
-      `;
+      return `<?xml version='1.0' encoding='UTF-8' standalone='yes'?>
+<w:document xmlns:wpc="http://schemas.microsoft.com/office/word/2010/wordprocessingCanvas" xmlns:mo="http://schemas.microsoft.com/office/mac/office/2008/main" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" xmlns:mv="urn:schemas-microsoft-com:mac:vml" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:v="urn:schemas-microsoft-com:vml" xmlns:wp14="http://schemas.microsoft.com/office/word/2010/wordprocessingDrawing" xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing" xmlns:w10="urn:schemas-microsoft-com:office:word" xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main" xmlns:w14="http://schemas.microsoft.com/office/word/2010/wordml" xmlns:wpg="http://schemas.microsoft.com/office/word/2010/wordprocessingGroup" xmlns:wpi="http://schemas.microsoft.com/office/word/2010/wordprocessingInk" xmlns:wne="http://schemas.microsoft.com/office/word/2006/wordml" xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape" mc:Ignorable="w14 wp14">
+  <w:body>
+    <w:p><w:pPr><w:spacing w:before="0" w:after="80"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:color w:val="003366"/><w:sz w:val="40"/></w:rPr><w:t>${{escapeXml(r.title || 'Ayuda memoria')}}</w:t></w:r></w:p>
+    <w:p><w:pPr><w:spacing w:before="0" w:after="280"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:color w:val="505050"/><w:sz w:val="28"/></w:rPr><w:t>${{escapeXml(r.subtitle || ('Empresas exportadoras a ' + r.country + ' - Ruta Exportadora'))}}</w:t></w:r></w:p>
+    <w:p><w:pPr><w:spacing w:line="276" w:lineRule="auto" w:after="160"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr><w:t>${{escapeXml(p.p1 || '')}}</w:t></w:r></w:p>
+    <w:p><w:pPr><w:spacing w:line="276" w:lineRule="auto" w:after="240"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:sz w:val="22"/></w:rPr><w:t>${{escapeXml(p.p2 || '')}}</w:t></w:r></w:p>
+    <w:p><w:pPr><w:spacing w:before="120" w:after="120"/></w:pPr><w:r><w:rPr><w:rFonts w:ascii="Calibri" w:hAnsi="Calibri"/><w:b/><w:sz w:val="22"/></w:rPr><w:t>${{escapeXml(p.events_heading || 'Los principales programas en donde participaron las empresas fueron:')}}</w:t></w:r></w:p>
+    ${{bulletsXml}}
+    <w:sectPr w:rsidR="00FC693F" w:rsidRPr="0006063C" w:rsidSect="00034616"><w:pgSz w:w="12240" w:h="15840"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1440" w:header="720" w:footer="720" w:gutter="0"/><w:cols w:space="720"/><w:docGrid w:linePitch="360"/></w:sectPr>
+  </w:body>
+</w:document>`;
+    }}
 
-      const blob = new Blob(['\\ufeff', wordDocContent], {{ type: 'application/msword' }});
-      const filename = `Ayuda_Memoria_Exportaciones_${{r.country.replace(/ /g, '_')}}.doc`;
-      
+    async function downloadWordOfficial() {{
+      if (!AppState.currentReport) return;
+      const r = AppState.currentReport;
+      const cleanCountry = r.country.replace(/ /g, '_');
+      const filename = `Ayuda_Memoria_Exportaciones_${{cleanCountry}}.docx`;
+
+      // 1. Si está conectado al servidor API (FastAPI / backend), intentar descargar .docx generado por python-docx
+      if (window.location.protocol.startsWith('http')) {{
+        try {{
+          const controller = new AbortController();
+          const timeoutId = setTimeout(() => controller.abort(), 2000);
+          const res = await fetch(`/api/export/docx?country=${{encodeURIComponent(r.country)}}`, {{ signal: controller.signal }});
+          clearTimeout(timeoutId);
+          if (res.ok) {{
+            const blob = await res.blob();
+            triggerBlobDownload(blob, filename);
+            showToast('Documento Word (.docx) descargado exitosamente');
+            return;
+          }}
+        }} catch (e) {{
+          console.warn('API de exportación no disponible, generando .docx nativo en cliente:', e);
+        }}
+      }}
+
+      // 2. Generación nativa client-side .docx con JSZip y plantilla oficial
+      try {{
+        if (typeof JSZip === 'undefined') {{
+          throw new Error('Librería JSZip no disponible');
+        }}
+        showToast('Generando documento Word (.docx)...');
+        const zip = await JSZip.loadAsync(DOCX_TEMPLATE_B64, {{ base64: true }});
+        const docXml = buildDocumentXml(r);
+        zip.file("word/document.xml", docXml);
+        const blob = await zip.generateAsync({{
+          type: "blob",
+          mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          compression: "DEFLATE",
+          compressionOptions: {{ level: 6 }}
+        }});
+        triggerBlobDownload(blob, filename);
+        showToast('Documento Word (.docx) descargado exitosamente');
+      }} catch (err) {{
+        console.error('Error generando archivo .docx:', err);
+        showToast('Error al generar el documento .docx: ' + err.message, true);
+      }}
+    }}
+
+    function triggerBlobDownload(blob, filename) {{
       const link = document.createElement('a');
       link.href = URL.createObjectURL(blob);
       link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(link.href);
-
-      showToast('Documento Word descargado exitosamente');
+      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
     }}
 
     function copyFullReportText() {{

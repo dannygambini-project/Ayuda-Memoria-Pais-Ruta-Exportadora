@@ -7,7 +7,15 @@ import numpy as np
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cache")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-RUTEX_FILE = os.path.join(BASE_DIR, "base rutex 29.09.2026 - Colab.xlsx")
+# Configuración de archivos de datos (Actualizado a 20.10.2026)
+RUTEX_FILE = os.path.join(BASE_DIR, "base rutex 20.10.2026 - Colab.xlsx")
+if not os.path.exists(RUTEX_FILE):
+    # Detección dinámica de la versión más reciente en caso de cambio de nombre
+    candidates = [f for f in os.listdir(BASE_DIR) if f.lower().startswith("base rutex") and f.lower().endswith(".xlsx")]
+    if candidates:
+        candidates.sort(reverse=True)
+        RUTEX_FILE = os.path.join(BASE_DIR, candidates[0])
+
 EXP_2024_FILE = os.path.join(BASE_DIR, "EXPORTACIONES 2024.xlsx")
 EXP_2025_FILE = os.path.join(BASE_DIR, "EXPORTACIONES 2025.xlsx")
 
