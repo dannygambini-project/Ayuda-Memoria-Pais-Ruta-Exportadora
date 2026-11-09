@@ -2,10 +2,11 @@ import base64
 import io
 import json
 import os
+import re
 import sys
 import zipfile
 from datetime import datetime
-from data_processor import DataStore
+from data_processor import DataStore, RUTEX_FILE
 from export_docx import generate_docx
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -31,6 +32,9 @@ def get_docx_template_b64():
 def build_standalone():
     print("Iniciando compilación de versión HTML autónoma y portable...")
     ds = DataStore.get_instance()
+    rutex_base_name = os.path.basename(RUTEX_FILE)
+    m_date = re.search(r'(\d{1,2}\.\d{1,2}\.\d{4})', rutex_base_name)
+    rutex_date_str = m_date.group(1) if m_date else "03.11.2026"
     
     # 1. Precomputar todos los reportes de los países
     print(f"Precomputando métricas para {len(ds.countries)} países...")
@@ -122,9 +126,9 @@ def build_standalone():
       </div>
       
       <div class="nav-status">
-        <span class="standalone-badge" title="Este archivo contiene todos los datos embebidos y funciona de forma autónoma en cualquier computadora sin internet ni servidor">
-          <i class="fa-solid fa-laptop-file"></i>
-          Versión Autónoma Portable (100% Funcional)
+        <span class="standalone-badge" title="Datos sincronizados con {rutex_base_name} y Exportaciones oficiales 2024-2025. Funciona de forma 100% autónoma en cualquier computadora sin internet ni servidor.">
+          <i class="fa-solid fa-circle-check" style="color: #10B981;"></i>
+          Base RUTEX {rutex_date_str} Sincronizada
         </span>
       </div>
     </div>

@@ -7,14 +7,30 @@ import numpy as np
 CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".cache")
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-# Configuración de archivos de datos (Actualizado a 20.10.2026)
-RUTEX_FILE = os.path.join(BASE_DIR, "base rutex 20.10.2026 - Colab.xlsx")
-if not os.path.exists(RUTEX_FILE):
-    # Detección dinámica de la versión más reciente en caso de cambio de nombre
-    candidates = [f for f in os.listdir(BASE_DIR) if f.lower().startswith("base rutex") and f.lower().endswith(".xlsx")]
-    if candidates:
-        candidates.sort(reverse=True)
-        RUTEX_FILE = os.path.join(BASE_DIR, candidates[0])
+# Configuración de archivos de datos (Actualizado dinámicamente con detección de última versión)
+def get_latest_rutex_file(base_dir: str) -> str:
+    """
+    Detecta dinámicamente el archivo de la base Rutex más reciente disponible en el directorio.
+    Prioriza por fecha contenida en el nombre (formato DD.MM.YYYY) y por fecha de modificación.
+    """
+    candidates = [
+        f for f in os.listdir(base_dir)
+        if f.lower().startswith("base rutex") and f.lower().endswith(".xlsx") and not f.startswith("~$")
+    ]
+    if not candidates:
+        return os.path.join(base_dir, "base rutex 03.11.2026 - Colab.xlsx")
+
+    def parse_rutex_key(filename: str):
+        m = re.search(r'(\d{1,2})\.(\d{1,2})\.(\d{4})', filename)
+        if m:
+            d, mo, y = int(m.group(1)), int(m.group(2)), int(m.group(3))
+            return (y, mo, d)
+        return (0, 0, 0)
+
+    candidates.sort(key=lambda f: (parse_rutex_key(f), os.path.getmtime(os.path.join(base_dir, f))), reverse=True)
+    return os.path.join(base_dir, candidates[0])
+
+RUTEX_FILE = get_latest_rutex_file(BASE_DIR)
 
 EXP_2024_FILE = os.path.join(BASE_DIR, "EXPORTACIONES 2024.xlsx")
 EXP_2025_FILE = os.path.join(BASE_DIR, "EXPORTACIONES 2025.xlsx")
@@ -64,67 +80,88 @@ class DataStore:
         if self._initialized and not force_reload:
             return
 
+        import json
         os.makedirs(CACHE_DIR, exist_ok=True)
         rutex_cache = os.path.join(CACHE_DIR, "rutex.pkl")
         exp_2024_cache = os.path.join(CACHE_DIR, "exp_2024.pkl")
         exp_2025_cache = os.path.join(CACHE_DIR, "exp_2025.pkl")
+        meta_cache = os.path.join(CACHE_DIR, "cache_meta.json")
 
-        need_build_cache = force_reload or not (
-            os.path.exists(rutex_cache) and 
-            os.path.exists(exp_2024_cache) and 
-            os.path.exists(exp_2025_cache)
-        )
+        rutex_mtime = os.path.getmtime(RUTEX_FILE) if os.path.exists(RUTEX_FILE) else 0
+        exp_2024_mtime = os.path.getmtime(EXP_2024_FILE) if os.path.exists(EXP_2024_FILE) else 0
+        exp_2025_mtime = os.path.getmtime(EXP_2025_FILE) if os.path.exists(EXP_2025_FILE) else 0
 
-        if not need_build_cache:
-            # Check modification dates
-            rutex_mtime = os.path.getmtime(RUTEX_FILE) if os.path.exists(RUTEX_FILE) else 0
-            exp_2024_mtime = os.path.getmtime(EXP_2024_FILE) if os.path.exists(EXP_2024_FILE) else 0
-            exp_2025_mtime = os.path.getmtime(EXP_2025_FILE) if os.path.exists(EXP_2025_FILE) else 0
-            cache_mtime = min(os.path.getmtime(rutex_cache), os.path.getmtime(exp_2024_cache), os.path.getmtime(exp_2025_cache))
-            if cache_mtime < max(rutex_mtime, exp_2024_mtime, exp_2025_mtime):
-                need_build_cache = True
+        cached_rutex_name = None
+        if os.path.exists(meta_cache):
+            try:
+                with open(meta_cache, "r", encoding="utf-8") as f:
+                    meta_info = json.load(f)
+                    cached_rutex_name = meta_info.get("rutex_file")
+            except Exception:
+                pass
 
-        if need_build_cache:
-            print("[DataStore] Generando caché binaria optimizada desde archivos Excel...")
+        current_rutex_name = os.path.basename(RUTEX_FILE)
+        need_rutex = force_reload or not os.path.exists(rutex_cache) or (os.path.getmtime(rutex_cache) < rutex_mtime) or (cached_rutex_name != current_rutex_name)
+        need_2024 = force_reload or not os.path.exists(exp_2024_cache) or (os.path.getmtime(exp_2024_cache) < exp_2024_mtime)
+        need_2025 = force_reload or not os.path.exists(exp_2025_cache) or (os.path.getmtime(exp_2025_cache) < exp_2025_mtime)
+
+        any_cache_updated = False
+
+        if need_rutex:
+            print(f"[DataStore] Procesando y actualizando caché de Rutex desde {current_rutex_name}...")
             t0 = time.time()
             df_rutex = pd.read_excel(RUTEX_FILE)
-            df_exp_2024 = pd.read_excel(EXP_2024_FILE)
-            df_exp_2025 = pd.read_excel(EXP_2025_FILE)
-
-            # Limpieza y estandarización
             df_rutex['RUC_CLEAN'] = limpiar_ruc(df_rutex['RUC'])
-            df_exp_2024['RUC_CLEAN'] = limpiar_ruc(df_exp_2024['RUC'])
-            df_exp_2025['RUC_CLEAN'] = limpiar_ruc(df_exp_2025['RUC'])
-
-            df_exp_2024['FOB USD'] = limpiar_monto(df_exp_2024['FOB USD'])
-            df_exp_2025['FOB USD'] = limpiar_monto(df_exp_2025['FOB USD'])
-
-            df_exp_2024['MERCADO'] = df_exp_2024['MERCADO'].astype(str).str.strip()
-            df_exp_2025['MERCADO'] = df_exp_2025['MERCADO'].astype(str).str.strip()
-
-            # Guardar pickle
             df_rutex.to_pickle(rutex_cache)
+            try:
+                with open(meta_cache, "w", encoding="utf-8") as f:
+                    json.dump({"rutex_file": current_rutex_name, "updated_at": time.time()}, f)
+            except Exception:
+                pass
+            print(f"[DataStore] Caché Rutex generada en {time.time() - t0:.2f}s")
+            any_cache_updated = True
+
+        if need_2024:
+            print(f"[DataStore] Procesando y actualizando caché Exportaciones 2024...")
+            t0 = time.time()
+            df_exp_2024 = pd.read_excel(EXP_2024_FILE)
+            df_exp_2024['RUC_CLEAN'] = limpiar_ruc(df_exp_2024['RUC'])
+            df_exp_2024['FOB USD'] = limpiar_monto(df_exp_2024['FOB USD'])
+            df_exp_2024['MERCADO'] = df_exp_2024['MERCADO'].astype(str).str.strip()
             df_exp_2024.to_pickle(exp_2024_cache)
+            print(f"[DataStore] Caché 2024 generada en {time.time() - t0:.2f}s")
+            any_cache_updated = True
+
+        if need_2025:
+            print(f"[DataStore] Procesando y actualizando caché Exportaciones 2025...")
+            t0 = time.time()
+            df_exp_2025 = pd.read_excel(EXP_2025_FILE)
+            df_exp_2025['RUC_CLEAN'] = limpiar_ruc(df_exp_2025['RUC'])
+            df_exp_2025['FOB USD'] = limpiar_monto(df_exp_2025['FOB USD'])
+            df_exp_2025['MERCADO'] = df_exp_2025['MERCADO'].astype(str).str.strip()
             df_exp_2025.to_pickle(exp_2025_cache)
-            print(f"[DataStore] Caché generada en {time.time() - t0:.2f}s")
-        else:
-            print("[DataStore] Cargando datos desde caché rápida...")
+            print(f"[DataStore] Caché 2025 generada en {time.time() - t0:.2f}s")
+            any_cache_updated = True
+
+        if not any_cache_updated:
+            print(f"[DataStore] Cargando datos desde caché rápida ({current_rutex_name})...")
 
         t0 = time.time()
         self.df_rutex = pd.read_pickle(rutex_cache)
         self.df_exp_2024 = pd.read_pickle(exp_2024_cache)
         self.df_exp_2025 = pd.read_pickle(exp_2025_cache)
         self.rucs_rutex = set(self.df_rutex['RUC_CLEAN'].dropna().unique())
-        print(f"[DataStore] Datos cargados en memoria en {time.time() - t0:.2f}s")
+        print(f"[DataStore] Datos cargados en memoria en {time.time() - t0:.2f}s ({len(self.rucs_rutex)} RUCs Rutex)")
 
         self._build_country_list()
         self._initialized = True
 
-        # Sincronización automática de Ayuda_Memoria_País_PROMPERU_2026.html si la BD cambió
+        # Sincronización automática de Ayuda_Memoria_País_PROMPERU_2026.html e index.html si la BD cambió
         standalone_html = os.path.join(BASE_DIR, "Ayuda_Memoria_País_PROMPERU_2026.html")
-        if need_build_cache or not os.path.exists(standalone_html):
+        index_html = os.path.join(BASE_DIR, "index.html")
+        if any_cache_updated or not os.path.exists(standalone_html) or not os.path.exists(index_html):
             try:
-                print("[DataStore] BD actualizada detectada. Auto-sincronizando Ayuda_Memoria_País_PROMPERU_2026.html...")
+                print(f"[DataStore] BD actualizada detectada ({current_rutex_name}). Auto-sincronizando archivos HTML...")
                 from build_standalone import build_standalone
                 build_standalone()
             except Exception as err:

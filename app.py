@@ -43,11 +43,12 @@ def get_index():
 
 @app.get("/api/countries")
 def get_countries():
-    from data_processor import DataStore
+    from data_processor import DataStore, RUTEX_FILE
     ds = DataStore.get_instance()
     return {
         "total": len(ds.countries),
-        "countries": ds.countries
+        "countries": ds.countries,
+        "rutex_file": os.path.basename(RUTEX_FILE)
     }
 
 @app.get("/api/report")
