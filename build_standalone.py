@@ -34,7 +34,7 @@ def build_standalone():
     ds = DataStore.get_instance()
     rutex_base_name = os.path.basename(RUTEX_FILE)
     m_date = re.search(r'(\d{1,2}\.\d{1,2}\.\d{4})', rutex_base_name)
-    rutex_date_str = m_date.group(1) if m_date else "03.11.2026"
+    rutex_date_str = m_date.group(1) if m_date else "24.11.2026"
     
     # 1. Precomputar todos los reportes de los países
     print(f"Precomputando métricas para {len(ds.countries)} países...")

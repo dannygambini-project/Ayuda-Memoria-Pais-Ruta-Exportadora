@@ -7,7 +7,7 @@ Aplicación web y dashboard interactivo de alto rendimiento para el análisis ce
 ## 🌟 Características Principales
 
 1. **Procesamiento de Datos Automatizado y de Alta Velocidad**:
-   - Cruce exacto por **RUC** estandarizado entre las bases de datos `EXPORTACIONES 2024.xlsx`, `EXPORTACIONES 2025.xlsx` y `base rutex 03.11.2026 - Colab.xlsx` (con detección dinámica automática de la versión más reciente).
+   - Cruce exacto por **RUC** estandarizado entre las bases de datos `EXPORTACIONES 2024.xlsx`, `EXPORTACIONES 2025.xlsx` y `base rutex 24.11.2026 - Colab.xlsx` (con detección dinámica automática de la versión más reciente).
    - Cálculo en tiempo real de:
      - Número de empresas exportadoras en Ruta Exportadora atendidas en 2026.
      - Número de partidas arancelarias únicas (productos) exportados en 2025.

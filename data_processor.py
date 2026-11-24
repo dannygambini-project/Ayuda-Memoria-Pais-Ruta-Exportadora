@@ -18,7 +18,7 @@ def get_latest_rutex_file(base_dir: str) -> str:
         if f.lower().startswith("base rutex") and f.lower().endswith(".xlsx") and not f.startswith("~$")
     ]
     if not candidates:
-        return os.path.join(base_dir, "base rutex 03.11.2026 - Colab.xlsx")
+        return os.path.join(base_dir, "base rutex 24.11.2026 - Colab.xlsx")
 
     def parse_rutex_key(filename: str):
         m = re.search(r'(\d{1,2})\.(\d{1,2})\.(\d{4})', filename)
